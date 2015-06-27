@@ -127,9 +127,9 @@ class Fluent::ElasticsearchOutput < Fluent::BufferedOutput
     chunk.msgpack_each do |tag, time, record|
       next unless record.is_a? Hash
       if @logstash_format
-        if record.has_key?("@msec_key")
+        if record.has_key?(@msec_key)
           record.merge!({"@timestamp" => Time.at(time, record[@msec_key].to_i * 1000).strftime("%Y-%m-%dT%H:%M:%S.%L%z")})
-          record.delete("@msec_key")
+          record.delete(@msec_key)
         elsif record.has_key?("@timestamp")
           time = Time.parse record["@timestamp"]
         elsif record.has_key?(@time_key)
