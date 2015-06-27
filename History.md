@@ -2,6 +2,15 @@
 
 ### Future
 
+### 0.9.0
+- Add `ssl_verify` option (#108)
+
+### 0.8.0
+- Replace Patron with Excon HTTP client
+
+### 0.7.0
+- Add new option `time_key` (#85)
+
 ### 0.6.1
 - 0.10.43 is minimum version required of fluentd (#79)
 

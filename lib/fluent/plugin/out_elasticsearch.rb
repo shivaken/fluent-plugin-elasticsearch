@@ -1,6 +1,6 @@
 # encoding: UTF-8
 require 'date'
-require 'patron'
+require 'excon'
 require 'elasticsearch'
 require 'uri'
 
@@ -28,6 +28,8 @@ class Fluent::ElasticsearchOutput < Fluent::BufferedOutput
   config_param :reload_connections, :bool, :default => true
   config_param :reload_on_failure, :bool, :default => false
   config_param :msec_key, :string, :default => 'msec'
+  config_param :time_key, :string, :default => nil
+  config_param :ssl_verify , :bool, :default => true
 
   include Fluent::SetTagKeyMixin
   config_set_default :include_tag_key, false
@@ -46,21 +48,22 @@ class Fluent::ElasticsearchOutput < Fluent::BufferedOutput
 
   def client
     @_es ||= begin
-      adapter_conf = lambda {|f| f.adapter :patron }
+      adapter_conf = lambda {|f| f.adapter :excon }
       transport = Elasticsearch::Transport::Transport::HTTP::Faraday.new(get_connection_options.merge(
                                                                           options: {
                                                                             reload_connections: @reload_connections,
                                                                             reload_on_failure: @reload_on_failure,
                                                                             retry_on_failure: 5,
                                                                             transport_options: {
-                                                                              request: { timeout: @request_timeout }
+                                                                              request: { timeout: @request_timeout },
+                                                                              ssl: { verify: @ssl_verify }
                                                                             }
                                                                           }), &adapter_conf)
       es = Elasticsearch::Client.new transport: transport
 
       begin
         raise ConnectionFailure, "Can not reach Elasticsearch cluster (#{connection_options_description})!" unless es.ping
-      rescue Faraday::ConnectionFailed => e
+      rescue *es.transport.host_unreachable_exceptions => e
         raise ConnectionFailure, "Can not reach Elasticsearch cluster (#{connection_options_description})! #{e.message}"
       end
 
@@ -129,6 +132,9 @@ class Fluent::ElasticsearchOutput < Fluent::BufferedOutput
           record.delete("@msec_key")
         elsif record.has_key?("@timestamp")
           time = Time.parse record["@timestamp"]
+        elsif record.has_key?(@time_key)
+          time = Time.parse record[@time_key]
+          record['@timestamp'] = record[@time_key]
         else
           record.merge!({"@timestamp" => Time.at(time).to_datetime.to_s})
         end
@@ -166,7 +172,7 @@ class Fluent::ElasticsearchOutput < Fluent::BufferedOutput
     retries = 0
     begin
       client.bulk body: data
-    rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
+    rescue *client.transport.host_unreachable_exceptions => e
       if retries < 2
         retries += 1
         @_es = nil

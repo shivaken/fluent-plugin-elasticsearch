@@ -30,7 +30,7 @@ class ElasticsearchOutput < Test::Unit::TestCase
   end
 
   def stub_elastic_ping(url="http://localhost:9200")
-    stub_request(:head, url).with.to_return(:status => 200, :body => "", :headers => {})
+    stub_request(:head, url).to_return(:status => 200, :body => "", :headers => {})
   end
 
   def stub_elastic(url="http://localhost:9200/_bulk")
@@ -328,6 +328,18 @@ class ElasticsearchOutput < Test::Unit::TestCase
     stub_elastic
     ts = DateTime.new(2001,2,3).to_s
     driver.emit(sample_record.merge!('@timestamp' => ts))
+    driver.run
+    assert(index_cmds[1].has_key? '@timestamp')
+    assert_equal(index_cmds[1]['@timestamp'], ts)
+  end
+
+  def test_uses_custom_time_key
+    driver.configure("logstash_format true
+                      time_key vtm\n")
+    stub_elastic_ping
+    stub_elastic
+    ts = DateTime.new(2001,2,3).to_s
+    driver.emit(sample_record.merge!('vtm' => ts))
     driver.run
     assert(index_cmds[1].has_key? '@timestamp')
     assert_equal(index_cmds[1]['@timestamp'], ts)
